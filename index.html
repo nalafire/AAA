@@ -1,42 +1,100 @@
-async function generateStory() {
-    const output = document.getElementById('storyOutput');
-    const key = document.getElementById('apiKey').value.trim(); // 自動去掉前後空格
-    if (!key) return alert("兄弟，請先貼上 Groq 的 API Key 喔！");
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>私藏創作館</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;700&display=swap');
+        body { font-family: 'Noto Serif TC', serif; background-color: #f4f1ea; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+    </style>
+</head>
+<body class="h-screen flex overflow-hidden">
 
-    const charA = document.getElementById('charA').value || "未知主角";
-    const charB = document.getElementById('charB').value || "另一位主角";
-    const rel = document.getElementById('relation').value || "互動";
-    const type = document.getElementById('storyType').value;
-    const ins = document.getElementById('intensity').value;
+    <!-- 左側面板 -->
+    <aside id="sidebar" class="w-80 bg-white border-r border-stone-200 h-full flex flex-col z-20 shadow-xl transition-all duration-300">
+        <div class="p-6 overflow-y-auto no-scrollbar flex-1">
+            <h1 class="text-2xl font-bold mb-6 border-stone-800 border-b pb-2">創作設定</h1>
+            <div class="space-y-4">
+                <select id="storyType" class="w-full border rounded p-2 text-sm bg-stone-50">
+                    <option value="BL">BL (耽美)</option>
+                    <option value="GL">GL (百合)</option>
+                    <option value="BG">BG (言情)</option>
+                </select>
+                <input id="charA" type="text" placeholder="角色 A (名字, 性格)" class="w-full border rounded p-2 text-sm">
+                <input id="charB" type="text" placeholder="角色 B (名字, 性格)" class="w-full border rounded p-2 text-sm">
+                <textarea id="relation" rows="3" placeholder="背景情境描述..." class="w-full border rounded p-2 text-sm"></textarea>
+                <div>
+                    <label class="text-xs text-stone-500 font-bold">張力程度: <span id="intensityVal">50</span>%</label>
+                    <input id="intensity" type="range" min="0" max="100" value="50" oninput="document.getElementById('intensityVal').innerText = this.value" class="w-full accent-stone-700">
+                </div>
+            </div>
+            <button onclick="copyPrompt()" class="w-full mt-6 bg-stone-800 text-white py-3 rounded-lg font-bold hover:bg-stone-700">複製創作指令</button>
+            <hr class="my-8">
+            <h2 class="text-lg font-bold mb-4">📚 我的書櫃</h2>
+            <div id="bookShelf" class="space-y-2 text-sm"></div>
+        </div>
+    </aside>
 
-    output.innerHTML = `<div class="text-center mt-20 text-stone-400 animate-pulse">正在連接私密引擎，碼字中...</div>`;
+    <!-- 右側閱讀區 -->
+    <main class="flex-1 flex flex-col bg-[#fdfaf5]">
+        <header class="h-14 flex items-center px-4 bg-white/70 border-b justify-between">
+            <button onclick="document.getElementById('sidebar').classList.toggle('-ml-80')" class="p-2 hover:bg-stone-200 rounded">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" /></svg>
+            </button>
+            <div id="currentTitle" class="font-bold">新文章</div>
+            <button onclick="saveStory()" class="bg-indigo-600 text-white px-4 py-1 rounded text-xs">儲存文章</button>
+        </header>
+        <div class="flex-1 overflow-y-auto p-6 md:p-12">
+            <div class="max-w-2xl mx-auto bg-white p-10 md:p-16 shadow-sm min-h-full rounded">
+                <div id="storyOutput" class="whitespace-pre-wrap leading-[2] text-lg outline-none" contenteditable="true">在這裡貼上 AI 生成的故事...</div>
+            </div>
+        </div>
+    </main>
 
-    try {
-        const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-            method: "POST",
-            headers: { 
-                "Authorization": `Bearer ${key}`, 
-                "Content-Type": "application/json"
-            },
-            body: JSON.stringify({
-                model: "llama3-70b-8192",
-                messages: [
-                    { role: "system", content: "你是一位擅長寫細膩情感小說的作家，請用繁體中文撰寫。" },
-                    { role: "user", content: `寫一段關於${type}的故事。主角A是${charA}，主角B是${charB}。關係情境：${rel}。激烈張力：${ins}/100。` }
-                ],
-                temperature: 0.8,
-                max_tokens: 1000
-            })
-        });
-
-        if (!res.ok) {
-            const errorData = await res.json();
-            throw new Error(errorData.error.message || "連線被拒絕");
+    <script>
+        let library = JSON.parse(localStorage.getItem('myStories') || '[]');
+        function copyPrompt() {
+            const charA = document.getElementById('charA').value || "主角A";
+            const charB = document.getElementById('charB').value || "主角B";
+            const rel = document.getElementById('relation').value || "互動";
+            const type = document.getElementById('storyType').value;
+            const ins = document.getElementById('intensity').value;
+            const p = `你是一位資深小說家。請用繁體中文寫一段${type}故事。主角A：${charA}，主角B：${charB}。情境：${rel}。張力：${ins}%。請注重感官氛圍與肢體描寫，文筆要細膩。`;
+            navigator.clipboard.writeText(p);
+            alert("指令已複製！請貼給 Gemini 寫作。");
         }
-
-        const data = await res.json();
-        output.innerText = data.choices[0].message.content;
-    } catch (e) {
-        output.innerHTML = `<div class="text-red-500 text-sm">連線失敗！原因：${e.message}<br>提示：請確認 API Key 是否正確（gsk_開頭），或嘗試更換瀏覽器。</div>`;
-    }
-}
+        function saveStory() {
+            const content = document.getElementById('storyOutput').innerText;
+            const title = prompt("文章標題？", "新故事");
+            if(!title) return;
+            library.unshift({id: Date.now(), title, content});
+            localStorage.setItem('myStories', JSON.stringify(library));
+            renderLibrary();
+        }
+        function renderLibrary() {
+            document.getElementById('bookShelf').innerHTML = library.map(s => `
+                <div class="p-2 bg-stone-50 border rounded flex justify-between">
+                    <span class="truncate cursor-pointer" onclick="loadStory(${s.id})">📔 ${s.title}</span>
+                    <button onclick="deleteStory(${s.id})" class="text-red-300">×</button>
+                </div>
+            `).join('');
+        }
+        function loadStory(id) {
+            const s = library.find(x => x.id === id);
+            document.getElementById('storyOutput').innerText = s.content;
+            document.getElementById('currentTitle').innerText = s.title;
+        }
+        function deleteStory(id) {
+            if(confirm("刪除？")) {
+                library = library.filter(x => x.id !== id);
+                localStorage.setItem('myStories', JSON.stringify(library));
+                renderLibrary();
+            }
+        }
+        renderLibrary();
+    </script>
+</body>
+</html>
