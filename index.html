@@ -1,0 +1,42 @@
+async function generateStory() {
+    const output = document.getElementById('storyOutput');
+    const key = document.getElementById('apiKey').value.trim(); // 自動去掉前後空格
+    if (!key) return alert("兄弟，請先貼上 Groq 的 API Key 喔！");
+
+    const charA = document.getElementById('charA').value || "未知主角";
+    const charB = document.getElementById('charB').value || "另一位主角";
+    const rel = document.getElementById('relation').value || "互動";
+    const type = document.getElementById('storyType').value;
+    const ins = document.getElementById('intensity').value;
+
+    output.innerHTML = `<div class="text-center mt-20 text-stone-400 animate-pulse">正在連接私密引擎，碼字中...</div>`;
+
+    try {
+        const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+            method: "POST",
+            headers: { 
+                "Authorization": `Bearer ${key}`, 
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                model: "llama3-70b-8192",
+                messages: [
+                    { role: "system", content: "你是一位擅長寫細膩情感小說的作家，請用繁體中文撰寫。" },
+                    { role: "user", content: `寫一段關於${type}的故事。主角A是${charA}，主角B是${charB}。關係情境：${rel}。激烈張力：${ins}/100。` }
+                ],
+                temperature: 0.8,
+                max_tokens: 1000
+            })
+        });
+
+        if (!res.ok) {
+            const errorData = await res.json();
+            throw new Error(errorData.error.message || "連線被拒絕");
+        }
+
+        const data = await res.json();
+        output.innerText = data.choices[0].message.content;
+    } catch (e) {
+        output.innerHTML = `<div class="text-red-500 text-sm">連線失敗！原因：${e.message}<br>提示：請確認 API Key 是否正確（gsk_開頭），或嘗試更換瀏覽器。</div>`;
+    }
+}
